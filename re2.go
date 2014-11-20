@@ -26,7 +26,6 @@ func QuoteMeta(s string) string {
 	return regexp.QuoteMeta(s)
 }
 
-// test
 func Compile(expr string) (*Regexp, error) {
 	origRe, err := regexp.Compile(expr)
 	re := &Regexp{
@@ -35,7 +34,6 @@ func Compile(expr string) (*Regexp, error) {
 	return re, err
 }
 
-// test
 func MustCompile(str string) *Regexp {
 	re := &Regexp{
 		origRe: regexp.MustCompile(str),
@@ -43,22 +41,18 @@ func MustCompile(str string) *Regexp {
 	return re
 }
 
-// test
 func (re *Regexp) Expand(dst []byte, template []byte, src []byte, match []int) []byte {
 	return re.origRe.Expand(dst, template, src, match)
 }
 
-// test
 func (re *Regexp) ExpandString(dst []byte, template string, src string, match []int) []byte {
 	return re.origRe.ExpandString(dst, template, src, match)
 }
 
-// test
 func (re *Regexp) Find(b []byte) []byte {
 	return re.origRe.Find(b)
 }
 
-// test
 func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 	return re.origRe.FindAll(b, n)
 }
