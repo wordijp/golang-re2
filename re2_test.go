@@ -709,6 +709,7 @@ func TestReplace(t *testing.T) {
 				detailErrorParent(t, "wrong")
 			}
 		}
+		check([]byte("-ab-axxb-"), []byte(""), []byte("---"))
 		check([]byte("-ab-axxb-"), []byte("T"), []byte("-T-T-"))
 		check([]byte("-ab-axxb-"), []byte("$1"), []byte("--xx-"))
 		//		check([]byte("-ab-axxb-"), []byte("$1W"), []byte("-W-xxW-")) // regexpでは"---"となる
@@ -781,6 +782,7 @@ func TestReplace(t *testing.T) {
 				detailErrorParent(t, "wrong")
 			}
 		}
+		check("-ab-axxb-", "", "---")
 		check("-ab-axxb-", "T", "-T-T-")
 		check("-ab-axxb-", "$1", "--xx-")
 		//		check("-ab-axxb-", "$1W", "-W-xxW-") // regexpでは"---"となる
