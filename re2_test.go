@@ -1,150 +1,21 @@
 package re2
 
 import (
-	"./testutil"
 	"fmt"
-	"reflect"
-	"strings"
+
+	//	"strings"
+	//	"regexp"
 	"testing"
 )
-
-func equals_i(t *testing.T, a, b int) bool {
-	if a != b {
-		testutil.DetailErrorfParent(t, "int: %d != %d", a, b)
-		return false
-	}
-
-	return true
-}
-
-func equals_ai(t *testing.T, a, b []int) bool {
-	if len(a) != len(b) {
-		testutil.DetailErrorfParent(t, "length: %d != %d", len(a), len(b))
-		return false
-	}
-
-	n := len(a)
-	for i := 0; i < n; i++ {
-		if !equals_i(t, a[i], b[i]) {
-			testutil.DetailErrorfParent(t, "wrong. []int at(%d)", i)
-			return false
-		}
-	}
-
-	return true
-}
-
-func equals_aai(t *testing.T, a, b [][]int) bool {
-	if len(a) != len(b) {
-		testutil.DetailErrorfParent(t, "length: %d != %d", len(a), len(b))
-		return false
-	}
-
-	n := len(a)
-	for i := 0; i < n; i++ {
-		if !equals_ai(t, a[i], b[i]) {
-			testutil.DetailErrorfParent(t, "wrong. [][]int at(%d)", i)
-			return false
-		}
-	}
-
-	return true
-}
-
-func equals_s(t *testing.T, a, b string) bool {
-	if a != b {
-		testutil.DetailErrorfParent(t, "string: %s != %s", a, b)
-		return false
-	}
-
-	return true
-}
-
-func equals_as(t *testing.T, a, b []string) bool {
-	if len(a) != len(b) {
-		testutil.DetailErrorfParent(t, "length: %d != %d", len(a), len(b))
-		return false
-	}
-
-	n := len(a)
-	for i := 0; i < n; i++ {
-		if !equals_s(t, a[i], b[i]) {
-			testutil.DetailErrorfParent(t, "wrong. []string at(%d)", i)
-			return false
-		}
-	}
-
-	return true
-}
-
-func equals_aas(t *testing.T, a, b [][]string) bool {
-	if len(a) != len(b) {
-		testutil.DetailErrorfParent(t, "length: %d != %d", len(a), len(b))
-		return false
-	}
-
-	n := len(a)
-	for i := 0; i < n; i++ {
-		if !equals_as(t, a[i], b[i]) {
-			testutil.DetailErrorfParent(t, "wrong. [][]string at(%d)", i)
-			return false
-		}
-	}
-
-	return true
-}
-
-func equals_ab(t *testing.T, a, b []byte) bool {
-	if !reflect.DeepEqual(a, b) {
-		testutil.DetailErrorfParent(t, "[]byte: %s != %s", fmt.Sprint(a), fmt.Sprint(b))
-		testutil.DetailErrorfParent(t, "[]byte(to string): %s != %s", string(a), string(b))
-		return false
-	}
-
-	return true
-}
-
-func equals_aab(t *testing.T, a, b [][]byte) bool {
-	if len(a) != len(b) {
-		testutil.DetailErrorfParent(t, "length: %d != %d", len(a), len(b))
-		return false
-	}
-
-	n := len(a)
-	for i := 0; i < n; i++ {
-		if !equals_ab(t, a[i], b[i]) {
-			testutil.DetailErrorfParent(t, "wrong. [][]byte at(%d)", i)
-			return false
-		}
-	}
-
-	return true
-}
-
-func equals_aaab(t *testing.T, a, b [][][]byte) bool {
-	if len(a) != len(b) {
-		testutil.DetailErrorfParent(t, "length: %d != %d", len(a), len(b))
-		return false
-	}
-
-	n := len(a)
-	for i := 0; i < n; i++ {
-		if !equals_aab(t, a[i], b[i]) {
-			testutil.DetailErrorfParent(t, "wrong. [][][]byte at(%d)", i)
-			return false
-		}
-	}
-
-	return true
-}
 
 func TestCompile(t *testing.T) {
 
 	// test wrong text
 	var checkWrong = func(str string) {
-		_, err := Compile(str)
+		re, closer, err := Compile(str)
+		defer closer.Close(re)
 		if err == nil {
-			testutil.DetailErrorf(t, "text:%s is wrong. but err == nil", str)
+			detailErrorf(t, "text:%s is wrong. but err == nil", str)
 		}
 	}
 	checkWrong("[a-z")
@@ -155,21 +26,65 @@ func TestCompile(t *testing.T) {
 
 	// test correct string
 	var checkCorrect = func(str string) {
-		_, err := Compile(str)
+		re, closer, err := Compile(str)
+		defer closer.Close(re)
 		if err != nil {
-			testutil.DetailError(t, err)
+			detailError(t, err)
 		}
 	}
-	checkCorrect("[a-z]")
+	checkCorrect("[a-z]?")
 	checkCorrect(".+.*")
 	checkCorrect(".?")
 	checkCorrect("()")
 	checkCorrect("(())")
 }
 
+func TestCompilePOSIX(t *testing.T) {
+	// POSIXではposix_syntax, longest_matchをtrue
+	var check = func(expr, input, answer string) {
+		re, closer := MustCompilePOSIX(expr)
+		defer closer.Close(re)
+		equals_s(t, re.FindString(input), answer)
+	}
+
+	check(
+		"a{1,4}?",
+		"aaaaa",
+		"aaaa",
+	)
+	check(
+		"-.+?-",
+		"-abc-eef-foo-hoge-",
+		"-abc-eef-foo-hoge-",
+	)
+	check(
+		".+[A-Z]{1,2}?",
+		"aaBBBcccc",
+		"aaBBBcccc",
+	)
+	check(
+		".+[A-Z]{1,2}",
+		"aaBBBcccc",
+		"aaBBB",
+	)
+	check(
+		"[a-z]+[A-Z]{1,2}?",
+		"aaBBBcccc",
+		"aaBB",
+	)
+	check(
+		"[a-z]+[A-Z]{1,2}",
+		"aaBBBcccc",
+		"aaBB",
+	)
+
+}
+
 func TestExpand(t *testing.T) {
 
-	re := MustCompile(`.*name\s+is\s+(?P<name>.+)\.`)
+	//	re, closer := MustCompile(`.*name\s+is\s+(?P<name>.+)\.`) // re2ではタグを使えない
+	re, closer := MustCompile(`.*name\s+is\s+(.+)\.`)
+	defer closer.Close(re)
 
 	src := []byte(`
 		my name is tom.
@@ -178,15 +93,16 @@ func TestExpand(t *testing.T) {
 		he name is hiroshi.
 	`)
 	answers := []string{
-		"name = tom",
-		"name = bob",
-		"name = hiroshi",
+		"prefix name = tom",
+		"prefix name = bob",
+		"prefix name = hiroshi",
 	}
 
 	// Expand
 	var ret []string
 	for _, s := range re.FindAllSubmatchIndex(src, -1) {
-		r := re.Expand([]byte(""), []byte("name = $name"), src, s)
+		//		r := re.RE2Expand([]byte("prefix "), []byte("name = $name"), src, s) // re2ではタグを使えない
+		r := re.RE2Expand([]byte("prefix "), []byte("name = $1"), src, s)
 		ret = append(ret, string(r))
 	}
 	equals_as(t, ret, answers)
@@ -194,14 +110,16 @@ func TestExpand(t *testing.T) {
 	// ExpandString
 	ret = ret[:0]
 	for _, s := range re.FindAllSubmatchIndex(src, -1) {
-		r := re.ExpandString([]byte(""), "name = $name", string(src), s)
+		//		r := re.RE2ExpandString([]byte("prefix "), "name = $1", string(src), s) // re2ではタグを使えない
+		r := re.RE2ExpandString([]byte("prefix "), "name = $1", string(src), s)
 		ret = append(ret, string(r))
 	}
 	equals_as(t, ret, answers)
 }
 
 func TestFind(t *testing.T) {
-	re := MustCompile(":([^: ]*)\\s*tom:")
+	re, closer := MustCompile(":([^: ]*)\\s*tom:")
+	defer closer.Close(re)
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 	//                   |     |    |                |    |
 	//                   4    10   15               32   37
@@ -210,12 +128,12 @@ func TestFind(t *testing.T) {
 		// Find
 		ret := re.Find(bytes)
 		if ret == nil {
-			testutil.DetailError(t, "Find is failed")
+			detailError(t, "Find is failed")
 		}
 
 		answer := ":super tom:"
 		if string(ret) != answer {
-			testutil.DetailErrorf(t, "string: %s != %s", string(ret), answer)
+			detailErrorf(t, "string: %s != %s", string(ret), answer)
 		}
 	}
 	{
@@ -307,21 +225,23 @@ func TestFind(t *testing.T) {
 	}
 	{
 		// FindReaderIndex
-		r := strings.NewReader(string(bytes))
-		ret := re.FindReaderIndex(r)
-		answers := []int{
-			4, 15,
-		}
-		equals_ai(t, ret, answers)
+		fmt.Println("* Find ReaderIndex not implemented *")
+		//			r := strings.NewReader(string(bytes))
+		//			ret := re.FindReaderIndex(r)
+		//			answers := []int{
+		//				4, 15,
+		//			}
+		//			equals_ai(t, ret, answers)
 	}
 	{
 		// FindReaderSubmatchIndex
-		r := strings.NewReader(string(bytes))
-		ret := re.FindReaderSubmatchIndex(r)
-		answers := []int{
-			4, 15, 5, 10,
-		}
-		equals_ai(t, ret, answers)
+		fmt.Println("* FindReaderSubmatchIndex not implemented *")
+		//		r := strings.NewReader(string(bytes))
+		//		ret := re.FindReaderSubmatchIndex(r)
+		//		answers := []int{
+		//			4, 15, 5, 10,
+		//		}
+		//		equals_ai(t, ret, answers)
 	}
 	{
 		// FindString
@@ -372,63 +292,109 @@ func TestFind(t *testing.T) {
 }
 
 func TestLiteralPrefix(t *testing.T) {
-	re := MustCompile("prefix[a-z]?")
-	prefix, _ := re.LiteralPrefix()
-	equals_s(t, prefix, "prefix")
+	fmt.Println("* LiteralPrefix not implemented *")
+	//	re := MustCompile("prefix[a-z]?")
+	//	prefix, _ := re.LiteralPrefix()
+	//	equals_s(t, prefix, "prefix")
 }
 
-// POSIX(最長一致)への切り替えテスト
+// 最長一致への切り替えテスト
+// NOTE : POSIXへの切り替えはしない
 func TestLongest(t *testing.T) {
-	{
-		re := MustCompile("a{1,4}?")
-		str := "aaaaa"
+	var check = func(expr, input, answer, answerLongested string) {
+		re, closer := MustCompile(expr)
+		defer closer.Close(re)
+		if !equals_s(t, re.FindString(input), answer) {
+			detailErrorParent(t, "wrong")
+		}
 
-		equals_s(t, re.FindString(str), "a")
 		re.Longest()
-		equals_s(t, re.FindString(str), "aaaa")
-	}
-	{
-		re := MustCompile("-.+?-")
-		str := "-abc-eef-foo-hoge-"
 
-		equals_s(t, re.FindString(str), "-abc-")
-		re.Longest()
-		equals_s(t, re.FindString(str), "-abc-eef-foo-hoge-")
+		if !equals_s(t, re.FindString(input), answerLongested) {
+			detailErrorParent(t, "wrong")
+		}
 	}
+
+	check(
+		"a{1,4}?",
+		"aaaaa",
+		"a",
+		"aaaa",
+	)
+	check(
+		"-.+?-",
+		"-abc-eef-foo-hoge-",
+		"-abc-",
+		"-abc-eef-foo-hoge-",
+	)
+	check(
+		"[a-z]+[A-Z]{1,2}?",
+		"aaBBBcccc",
+		"aaB",
+		"aaBB",
+	)
+	check(
+		"[a-z]+[A-Z]{1,2}",
+		"aaBBBcccc",
+		"aaBB",
+		"aaBB",
+	)
+	check(
+		".+[A-Z]{1,2}?",
+		"aaBBBcccc",
+		"aaBBB",
+		"aaBBB",
+	)
+	check(
+		".+[A-Z]{1,2}",
+		"aaBBBcccc",
+		"aaBBB",
+		"aaBBB",
+	)
 }
 
 func TestMatch(t *testing.T) {
-	re := MustCompile(":([^: ]*)\\s*tom:")
+	expr := ":([^: ]*)\\s*tom:"
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
 	var check = func(match bool) {
 		if !match {
-			testutil.DetailErrorParent(t, "not match")
+			detailErrorParent(t, "not match")
 		}
 	}
 
+	{
+		// Match (static method)
+		matched, err := Match(expr, bytes)
+		if err != nil {
+			detailErrorf(t, "wrong. err:%s", err)
+		}
+		check(matched)
+	}
 	{
 		// Match
 		check(re.Match(bytes))
 	}
 	{
-		// MatchReader
-		r := strings.NewReader(string(bytes))
-		check(re.MatchReader(r))
+		fmt.Println("* MatchReader not implemented *")
+		//		// MatchReader
+		//		r := strings.NewReader(string(bytes))
+		//		check(re.MatchReader(r))
 	}
 	{
 		// MatchString
 		check(re.MatchString(string(bytes)))
 	}
-
 }
 
 func TestNumSubexp(t *testing.T) {
-
 	var check = func(expr string, n int) {
-		re := MustCompile(expr)
+		re, closer := MustCompile(expr)
+		defer closer.Close(re)
 		if re.NumSubexp() != n {
-			testutil.DetailErrorfParent(t, "num: %d != %d", re.NumSubexp(), n)
+			detailErrorfParent(t, "num: %d != %d", re.NumSubexp(), n)
 		}
 	}
 
@@ -440,48 +406,72 @@ func TestNumSubexp(t *testing.T) {
 }
 
 func TestReplace(t *testing.T) {
-	re := MustCompile("{T_([^}]+)}")
-	bytes := []byte("{T_NAME}:Tom. {T_AGE}:18.")
+	re, closer := MustCompile("a(x*)b")
+	defer closer.Close(re)
 	{
 		// ReplaceAll
-		ret := re.ReplaceAll(bytes, []byte("@$1@"))
-		answers := []byte("@NAME@:Tom. @AGE@:18.")
-		equals_ab(t, ret, answers)
+		var check = func(str, repl, answer []byte) {
+			ret := re.RE2ReplaceAll(str, repl)
+			if !equals_ab(t, ret, answer) {
+				detailErrorParent(t, "wrong")
+			}
+		}
+		check([]byte("-ab-axxb-"), []byte("T"), []byte("-T-T-"))
+		check([]byte("-ab-axxb-"), []byte("$1"), []byte("--xx-"))
+		check([]byte("-ab-axxb-"), []byte("$1W"), []byte("-W-xxW-")) // regexpと結果が違う(regexpでは"---"となる)
+		//		check([]byte("-ab-axxb-"), []byte("${1}W"), []byte("-W-xxW-")) // re2では{}で囲えない
 	}
 	{
 		// ReplaceAllFunc
-		ret := re.ReplaceAllFunc(bytes, func(dst []byte) []byte {
-			return []byte(strings.ToLower(string(dst)))
-		})
-		answers := []byte("{t_name}:Tom. {t_age}:18.")
-		equals_ab(t, ret, answers)
+		fmt.Println("* ReplaceAllFunc not implemented *")
+		//		ret := re.ReplaceAllFunc(bytes, func(dst []byte) []byte {
+		//			return []byte(strings.ToLower(string(dst)))
+		//		})
+		//		answers := []byte("{t_name}:Tom. {t_age}:18.")
+		//		equals_ab(t, ret, answers)
 	}
 	{
 		// ReplaceAllLiteral
-		ret := re.ReplaceAllLiteral(bytes, []byte("@$1@"))
-		answers := []byte("@$1@:Tom. @$1@:18.")
+		ret := re.ReplaceAllLiteral([]byte("-ab-axxb-"), []byte("@$1@"))
+		answers := []byte("-@$1@-@$1@-")
 		equals_ab(t, ret, answers)
 
+		ret = re.ReplaceAllLiteral([]byte("-ab-axxb-"), []byte("@\\1@"))
+		answers = []byte("-@\\1@-@\\1@-")
+		equals_ab(t, ret, answers)
 	}
 	{
 		// ReplaceAllLiteralString
-		ret := re.ReplaceAllLiteralString(string(bytes), "@$1@")
-		answers := "@$1@:Tom. @$1@:18."
+		ret := re.ReplaceAllLiteralString("-ab-axxb-", "@$1@")
+		answers := "-@$1@-@$1@-"
+		equals_s(t, ret, answers)
+
+		ret = re.ReplaceAllLiteralString("-ab-axxb-", "@\\1@")
+		answers = "-@\\1@-@\\1@-"
 		equals_s(t, ret, answers)
 	}
+
 	{
 		// ReplaceAllString
-		ret := re.ReplaceAllString(string(bytes), "@$1@")
-		answers := "@NAME@:Tom. @AGE@:18."
-		equals_s(t, ret, answers)
+		var check = func(str, repl, answer string) {
+			ret := re.RE2ReplaceAllString(str, repl)
+			if !equals_s(t, ret, answer) {
+				detailErrorParent(t, "wrong")
+			}
+		}
+		check("-ab-axxb-", "T", "-T-T-")
+		check("-ab-axxb-", "$1", "--xx-")
+		//		check("-ab-axxb-", "$1W", "-W-xxW-") // regexpでは"---"となる
+		//		check("-ab-axxb-", "${1}W", "-W-xxW-") // re2では{}で囲えない
 	}
 	{
 		// ReplaceAllStringFunc
-		ret := re.ReplaceAllStringFunc(string(bytes), func(dst string) string {
-			return strings.ToLower(dst)
-		})
-		answers := "{t_name}:Tom. {t_age}:18."
-		equals_s(t, ret, answers)
+		fmt.Println("* ReplaceAllStringFunc not implemented *")
+		//		ret := re.ReplaceAllStringFunc(string(bytes), func(dst string) string {
+		//			return strings.ToLower(dst)
+		//		})
+		//		answers := "{t_name}:Tom. {t_age}:18."
+		//		equals_s(t, ret, answers)
 	}
 }
 
@@ -490,9 +480,14 @@ func TestOther(t *testing.T) {
 	{
 		// Split
 		var check = func(expr, str string, n int, answers []string) {
-			re := MustCompile(expr)
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+			//			re := regexp.MustCompile(expr)
+
 			ret := re.Split(str, n)
-			equals_as(t, ret, answers)
+			if !equals_as(t, ret, answers) {
+				detailErrorParent(t, "wrong.")
+			}
 		}
 
 		check(
@@ -501,6 +496,13 @@ func TestOther(t *testing.T) {
 			5,
 			[]string{
 				"abc", "123", "ABC", "45", "",
+			})
+		check(
+			"[0-9](;)",
+			"abc;123;ABC;45;",
+			2,
+			[]string{
+				"abc;12", "ABC;45;",
 			})
 
 		check(
@@ -518,21 +520,29 @@ func TestOther(t *testing.T) {
 			[]string{
 				"", "b", "b", "c", "cadaaae",
 			})
-
+		check(
+			"a*",
+			"baabaccadaaae",
+			5,
+			[]string{
+				"b", "b", "c", "c", "daaae",
+			})
 	}
 	{
 		// String
 		str := ":([^: ]*)\\s*tom:"
-		re := MustCompile(str)
+		re, closer := MustCompile(str)
+		defer closer.Close(re)
 		equals_s(t, re.String(), str)
 	}
 	{
 		// SubexpNames
-		re := MustCompile("(?P<first>[a-zA-Z]+) (?P<last>[a-zA-Z]+)")
-		ret := re.SubexpNames()
-		answers := []string{
-			"", "first", "last", // [0] is always the empty string.
-		}
-		equals_as(t, ret, answers)
+		fmt.Println("* ReplaceAllStringFunc not implemented *")
+		//		re := regexp.MustCompile("(?P<first>[a-zA-Z]+) (?P<last>[a-zA-Z]+)")
+		//		ret := re.SubexpNames()
+		//		answers := []string{
+		//			"", "first", "last", // [0] is always the empty string.
+		//		}
+		//		equals_as(t, ret, answers)
 	}
 }
