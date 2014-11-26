@@ -577,10 +577,17 @@ func (re *Regexp) RE2ReplaceAll(src, repl []byte) []byte {
 	}
 
 	re2_repl := replaceRE2Sequences(repl) // re2用のsequenceへ($n -> \\n)
-	c_re2_repl := (*C.char)(unsafe.Pointer(&re2_repl[0]))
-	cre2_re2_repl := C.cre2_string_t{
-		data:   c_re2_repl,
-		length: C.int(len(re2_repl)),
+	var cre2_re2_repl C.cre2_string_t
+	if len(re2_repl) > 0 {
+		cre2_re2_repl = C.cre2_string_t{
+			data:   (*C.char)(unsafe.Pointer(&re2_repl[0])),
+			length: C.int(len(re2_repl)),
+		}
+	} else {
+		cre2_re2_repl = C.cre2_string_t{
+			data:   nil,
+			length: 0,
+		}
 	}
 
 	C.cre2_global_replace_re(unsafe.Pointer(re.cre2_re), &cre2_text_and_target, &cre2_re2_repl)
@@ -608,10 +615,17 @@ func (re *Regexp) ReplaceAllLiteral(src, repl []byte) []byte {
 	}
 
 	re2_repl := replaceRE2InvalidSequences(repl) // sequencesの解析をしないように、\\を非sequencesへ置き換える
-	c_re2_repl := (*C.char)(unsafe.Pointer(&re2_repl[0]))
-	cre2_re2_repl := C.cre2_string_t{
-		data:   c_re2_repl,
-		length: C.int(len(re2_repl)),
+	var cre2_re2_repl C.cre2_string_t
+	if len(re2_repl) > 0 {
+		cre2_re2_repl = C.cre2_string_t{
+			data:   (*C.char)(unsafe.Pointer(&re2_repl[0])),
+			length: C.int(len(re2_repl)),
+		}
+	} else {
+		cre2_re2_repl = C.cre2_string_t{
+			data:   nil,
+			length: 0,
+		}
 	}
 
 	C.cre2_global_replace_re(unsafe.Pointer(re.cre2_re), &cre2_text_and_target, &cre2_re2_repl)
