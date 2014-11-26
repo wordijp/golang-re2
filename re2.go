@@ -6,20 +6,15 @@ package re2
 // int length_ptr(char *begin, char *end) {
 //     return (int)(end - begin);
 // }
-// char *step_ptr(char *pos, int step) {
-//    return pos + step;
-// }
 // char *next_ptr(char *pos) {
 //   return ++pos;
 // }
 import "C"
 
 import (
-	//"io"
 	"errors"
 	"fmt"
 	"math"
-	//"regexp"
 	"unsafe"
 )
 
@@ -37,11 +32,9 @@ import (
 
 // regexpインスタンスを解放する処理を担う
 // NOTE : メソッドはregexpと統一しているが、このライブラリだと解放処理が必要なので、
-//        そこだけインターフェースに差異を持たせ、単純置き換え時のClose呼び出し忘れを防ぐ
-type Closer struct {
-}
+//        返り値に差異を持たせ、単純置き換え時のClose呼び出し忘れを防ぐ
+type Closer struct{}
 
-// [x]
 func (c *Closer) Close(re *Regexp) {
 	if re != nil {
 		C.cre2_delete(unsafe.Pointer(re.cre2_re))
@@ -55,7 +48,6 @@ func (c *Closer) Close(re *Regexp) {
 // re2では、MatchやFindAndConsume時、ヒット箇所の抜出には外枠の()が必要で、Replace時は必要ない
 // その為、その差異を吸収する為に()の有り・無しの2種類を持つ
 type Regexp struct {
-	//	orig_re              *regexp.Regexp
 	cre2_re                    *C.cre2_regexp_t
 	cre2_re_with_bracket       *C.cre2_regexp_t
 	c_opt                      *C.cre2_options_t
@@ -65,7 +57,15 @@ type Regexp struct {
 	c_expr_with_bracket_length C.int
 }
 
-// [x]
+func MatchString(expr string, s string) (matched bool, err error) {
+	re, closer, err := Compile(expr)
+	defer closer.Close(re)
+	if err != nil {
+		return false, err
+	}
+	return re.MatchString(s), nil
+}
+
 func Match(expr string, b []byte) (matched bool, err error) {
 	re, closer, err := Compile(expr)
 	defer closer.Close(re)
@@ -80,20 +80,30 @@ func Match(expr string, b []byte) (matched bool, err error) {
 //    // not implemented
 //}
 
-// [ ]
-//func MatchString(pattern string, s string) (matched bool, err error) {
-//	return regexp.MatchString(pattern, s)
-//}
+func RE2QuoteMeta(s string) string {
+	b := []byte(s)
+	c_input := (*C.char)(unsafe.Pointer(&b[0]))
+	cre2_input := C.cre2_string_t{
+		data:   c_input,
+		length: C.int(len(b)),
+	}
 
-// [ ]
-//func QuoteMeta(s string) string {
-//	return regexp.QuoteMeta(s)
-//}
+	var cre2_quoted C.cre2_string_t
+	result := C.cre2_quote_meta(&cre2_quoted, &cre2_input)
+	if !bool(result == 0) {
+		panic("bad_alloc: malloc failed.")
+	}
+
+	ret := C.GoBytes(unsafe.Pointer(cre2_quoted.data), cre2_quoted.length)
+	C.free(unsafe.Pointer(cre2_quoted.data))
+
+	return string(ret)
+}
 
 func makeOptions(posix, longest, literal bool) *C.cre2_options_t {
 	// encodingはUTF-8のみ
 	opt := C.cre2_opt_new()
-	//	C.cre2_opt_set_encoding(opt, C.CRE2_UTF8) // デフォルトでutf8
+	//	C.cre2_opt_set_encoding(opt, C.CRE2_UTF8) // デフォルトでutf
 	if posix {
 		C.cre2_opt_set_posix_syntax(opt, 1)
 	}
@@ -182,8 +192,6 @@ func MustCompilePOSIX(expr string) (*Regexp, *Closer) {
 	return re, closer // regexp.MustCompilePOSIXと違い、Closerも返す
 }
 
-// [x]
-// dst [in] : 戻り値にこの[]byteを先頭に付けて返す
 func (re *Regexp) RE2Expand(dst []byte, template []byte, src []byte, match []int) []byte {
 
 	text := make([]byte, match[1]-match[0])
@@ -213,12 +221,10 @@ func (re *Regexp) RE2Expand(dst []byte, template []byte, src []byte, match []int
 	return append(dst, ret...)
 }
 
-// [x]
 func (re *Regexp) RE2ExpandString(dst []byte, template string, src string, match []int) []byte {
 	return re.RE2Expand(dst, []byte(template), []byte(src), match)
 }
 
-// [x]
 func (re *Regexp) Find(b []byte) []byte {
 	ret := re.FindAll(b, 1)
 	if ret == nil {
@@ -230,7 +236,6 @@ func (re *Regexp) Find(b []byte) []byte {
 	return ret[0]
 }
 
-// [x]
 func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 
 	c_input := (*C.char)(unsafe.Pointer(&b[0]))
@@ -239,8 +244,6 @@ func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 		length: C.int(len(b)),
 	}
 
-	var ret [][]byte
-
 	var _n int
 	if n >= 0 {
 		_n = n
@@ -248,20 +251,16 @@ func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 		// XXX : 無限ループにしなくて良いのか?
 		_n = math.MaxInt32
 	}
+
+	var ret [][]byte
 	for i := 0; i < _n; i++ {
 		var cre2_match [1]C.cre2_string_t
-		//		fmt.Println("expr:", C.GoString(re.c_expr_with_bracket))
-		//		fmt.Println("input:", C.GoString(c_input))
 		result := C.cre2_find_and_consume_re(unsafe.Pointer(re.cre2_re_with_bracket), &cre2_input, &cre2_match[0], 1)
 		if !bool(result != 0) {
 			break
 		}
 
-		//		fmt.Println("data   :", C.GoString(cre2_match[i].data))
-		//		fmt.Println("length :", cre2_match[i].length)
-
 		bytes := C.GoBytes(unsafe.Pointer(cre2_match[0].data), cre2_match[0].length)
-		//		fmt.Println("bytes:", string(bytes))
 		ret = append(ret, bytes)
 	}
 
@@ -271,7 +270,6 @@ func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 
 	c_input := (*C.char)(unsafe.Pointer(&b[0]))
@@ -280,7 +278,6 @@ func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 		length: C.int(len(b)),
 	}
 
-	var ret [][]int
 	var _n int
 	if n >= 0 {
 		_n = n
@@ -289,6 +286,8 @@ func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 		_n = math.MaxInt32
 	}
 	find := false
+
+	var ret [][]int
 	for i := 0; i < _n; i++ {
 		var cre2_match [1]C.cre2_string_t
 		result := C.cre2_find_and_consume_re(unsafe.Pointer(re.cre2_re_with_bracket), &cre2_input, &cre2_match[0], 1)
@@ -318,7 +317,6 @@ func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 			offset_end,
 		}
 		ret = append(ret, indexes)
-
 	}
 
 	if len(ret) == 0 {
@@ -327,7 +325,6 @@ func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindAllString(s string, n int) []string {
 	bytes := re.FindAll([]byte(s), n)
 	if bytes == nil {
@@ -341,12 +338,10 @@ func (re *Regexp) FindAllString(s string, n int) []string {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindAllStringIndex(s string, n int) [][]int {
 	return re.FindAllIndex([]byte(s), n)
 }
 
-// [x]
 func (re *Regexp) FindAllStringSubmatch(s string, n int) [][]string {
 	bytes := re.FindAllSubmatch([]byte(s), n)
 	if bytes == nil {
@@ -364,12 +359,10 @@ func (re *Regexp) FindAllStringSubmatch(s string, n int) [][]string {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindAllStringSubmatchIndex(s string, n int) [][]int {
 	return re.FindAllSubmatchIndex([]byte(s), n)
 }
 
-// [x]
 func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 
 	c_input := (*C.char)(unsafe.Pointer(&b[0]))
@@ -393,7 +386,6 @@ func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 
 		cre2_match := make([]C.cre2_string_t, int(groups))
 		result := C.cre2_find_and_consume_re(unsafe.Pointer(re.cre2_re_with_bracket), &cre2_input, &cre2_match[0], groups)
-		//		result := C.cre2_find_and_consume(re.c_expr_with_bracket, &cre2_input, &cre2_match[0], groups)
 		if !bool(result != 0) {
 			break
 		}
@@ -412,7 +404,6 @@ func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
 	c_input := (*C.char)(unsafe.Pointer(&b[0]))
 	cre2_input := C.cre2_string_t{
@@ -456,7 +447,6 @@ func (re *Regexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindIndex(b []byte) (loc []int) {
 	ret := re.FindAllIndex(b, 1)
 	if ret == nil {
@@ -468,27 +458,24 @@ func (re *Regexp) FindIndex(b []byte) (loc []int) {
 	return ret[0]
 }
 
-// [x]
+// [ ]
 //func (re *Regexp) FindReaderIndex(r io.RuneReader) (loc []int) {
 //    // not implemented
 //}
 
-// [x]
+// [ ]
 //func (re *Regexp) FindReaderSubmatchIndex(r io.RuneReader) []int {
-//  // not implemented
+//    // not implemented
 //}
 
-// [x]
 func (re *Regexp) FindString(s string) string {
 	return string(re.Find([]byte(s)))
 }
 
-// [x]
 func (re *Regexp) FindStringIndex(s string) (loc []int) {
 	return re.FindIndex([]byte(s))
 }
 
-// [x]
 func (re *Regexp) FindStringSubmatch(s string) []string {
 	bytes := re.FindSubmatch([]byte(s))
 
@@ -499,12 +486,10 @@ func (re *Regexp) FindStringSubmatch(s string) []string {
 	return ret
 }
 
-// [x]
 func (re *Regexp) FindStringSubmatchIndex(s string) []int {
 	return re.FindSubmatchIndex([]byte(s))
 }
 
-// [x]
 func (re *Regexp) FindSubmatch(b []byte) [][]byte {
 
 	ret := re.FindAllSubmatch(b, 1)
@@ -517,7 +502,6 @@ func (re *Regexp) FindSubmatch(b []byte) [][]byte {
 	return ret[0]
 }
 
-// [x]
 func (re *Regexp) FindSubmatchIndex(b []byte) []int {
 	ret := re.FindAllSubmatchIndex(b, 1)
 	if ret == nil {
@@ -529,9 +513,9 @@ func (re *Regexp) FindSubmatchIndex(b []byte) []int {
 	return ret[0]
 }
 
-//
+// [ ]
 //func (re *Regexp) LiteralPrefix() (prefix string, complete bool) {
-//	return re.cre2_re.LiteralPrefix()
+//    // not implemented
 //}
 
 // NOTE : re2のoptionsは変更出来ないので、インスタンスを作り変える
@@ -568,7 +552,7 @@ func (re *Regexp) Match(b []byte) bool {
 	return bool(result != 0)
 }
 
-// [x]
+// []
 //func (re *Regexp) MatchReader(r io.RuneReader) bool {
 //    // not implemented
 //}
@@ -608,8 +592,9 @@ func (re *Regexp) RE2ReplaceAll(src, repl []byte) []byte {
 	return ret
 }
 
+// [ ]
 //func (re *Regexp) ReplaceAllFunc(src []byte, repl func([]byte) []byte) []byte {
-//	return re.cre2_re.ReplaceAllFunc(src, repl)
+//	  // not implemented
 //}
 
 func (re *Regexp) ReplaceAllLiteral(src, repl []byte) []byte {
@@ -648,10 +633,11 @@ func (re *Regexp) RE2ReplaceAllString(src, repl string) string {
 	return string(re.RE2ReplaceAll([]byte(src), []byte(repl)))
 }
 
+// [ ]
 //func (re *Regexp) ReplaceAllStringFunc(src string, repl func(string) string) string {
-//	return re.cre2_re.ReplaceAllStringFunc(src, repl)
+//    // not implemented
 //}
-//
+
 func (re *Regexp) Split(s string, n int) []string {
 	if n == 0 {
 		return nil
@@ -689,6 +675,7 @@ func (re *Regexp) String() string {
 	return C.GoString(re.c_expr)
 }
 
+// [ ]
 //func (re *Regexp) SubexpNames() []string {
-//	return re.cre2_re.SubexpNames()
+//    // not implemented
 //}

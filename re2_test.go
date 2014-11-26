@@ -586,6 +586,36 @@ func TestMatch(t *testing.T) {
 		check(expr, bytes)
 	}
 	{
+		// MatchString (static method)
+		var check = func(expr string, s string) {
+			ret, err := MatchString(expr, s)
+			if err != nil {
+				detailErrorfParent(t, "wrong. err:%s", err)
+			}
+
+			prevRet, prevErr := regexp.MatchString(expr, s)
+			if prevErr != nil {
+				detailErrorfParent(t, "wrong, err:%s", prevErr)
+			}
+
+			if (err != nil) != (prevErr != nil) {
+				detailErrorParent(t, "wrong")
+			}
+
+			if !ret {
+				detailErrorParent(t, "not match")
+			}
+			if !prevRet {
+				detailErrorParent(t, "not match")
+			}
+			if ret != prevRet {
+				detailErrorParent(t, "wrong")
+			}
+		}
+		check(expr, string(bytes))
+	}
+
+	{
 		// Match
 		var check = func(bytes []byte) {
 			ret := re.Match(bytes)
@@ -611,9 +641,9 @@ func TestMatch(t *testing.T) {
 	}
 	{
 		// MatchString
-		var check = func(bytes []byte) {
-			ret := re.MatchString(string(bytes))
-			prevRet := prevRe.MatchString(string(bytes))
+		var check = func(s string) {
+			ret := re.MatchString(s)
+			prevRet := prevRe.MatchString(s)
 
 			if !ret {
 				detailErrorParent(t, "not match")
@@ -625,7 +655,7 @@ func TestMatch(t *testing.T) {
 				detailErrorParent(t, "wrong")
 			}
 		}
-		check(bytes)
+		check(string(bytes))
 	}
 }
 
@@ -711,6 +741,8 @@ func TestReplace(t *testing.T) {
 		}
 		check([]byte("-ab-axxb-"), []byte("@$1@"), []byte("-@$1@-@$1@-"))
 		check([]byte("-ab-axxb-"), []byte("@\\1@"), []byte("-@\\1@-@\\1@-"))
+		check([]byte("-ab-axxb-"), []byte("$1W"), []byte("-$1W-$1W-"))
+		check([]byte("-ab-axxb-"), []byte("${1}W"), []byte("-${1}W-${1}W-"))
 	}
 	{
 		// ReplaceAllLiteralString
@@ -730,6 +762,8 @@ func TestReplace(t *testing.T) {
 		}
 		check("-ab-axxb-", "@$1@", "-@$1@-@$1@-")
 		check("-ab-axxb-", "@\\1@", "-@\\1@-@\\1@-")
+		check("-ab-axxb-", "$1W", "-$1W-$1W-")
+		check("-ab-axxb-", "${1}W", "-${1}W-${1}W-")
 	}
 	{
 		// ReplaceAllString
@@ -763,7 +797,7 @@ func TestReplace(t *testing.T) {
 	}
 }
 
-// Split. String. SubexpNames.
+// Split. String. SubexpNames. QuoteMeta
 func TestOther(t *testing.T) {
 	{
 		// Split
@@ -794,13 +828,26 @@ func TestOther(t *testing.T) {
 				"abc", "123", "ABC", "45", "",
 			})
 		check(
+			";",
+			"abc;123;ABC;45;",
+			-1,
+			[]string{
+				"abc", "123", "ABC", "45", "",
+			})
+		check(
 			"[0-9](;)",
 			"abc;123;ABC;45;",
 			2,
 			[]string{
 				"abc;12", "ABC;45;",
 			})
-
+		check(
+			"[0-9](;)",
+			"abc;123;ABC;45;",
+			-1,
+			[]string{
+				"abc;12", "ABC;4", "",
+			})
 		check(
 			";",
 			"abc;;123;;ABC;;45;;",
@@ -808,7 +855,13 @@ func TestOther(t *testing.T) {
 			[]string{
 				"abc", "", "123", "", "ABC;;45;;",
 			})
-
+		check(
+			";",
+			"abc;;123;;ABC;;45;;",
+			-1,
+			[]string{
+				"abc", "", "123", "", "ABC", "", "45", "", "",
+			})
 		check(
 			"a*",
 			"abaabaccadaaae",
@@ -818,11 +871,26 @@ func TestOther(t *testing.T) {
 			})
 		check(
 			"a*",
+			"abaabaccadaaae",
+			-1,
+			[]string{
+				"", "b", "b", "c", "c", "d", "e",
+			})
+		check(
+			"a*",
 			"baabaccadaaae",
 			5,
 			[]string{
 				"b", "b", "c", "c", "daaae",
 			})
+		check(
+			"a*",
+			"baabaccadaaae",
+			-1,
+			[]string{
+				"b", "b", "c", "c", "d", "e",
+			})
+
 	}
 	{
 		// String
@@ -843,12 +911,34 @@ func TestOther(t *testing.T) {
 	}
 	{
 		// SubexpNames
-		fmt.Println("* ReplaceAllStringFunc not implemented *")
+		fmt.Println("* SubexpNames not implemented *")
 		//		re := regexp.MustCompile("(?P<first>[a-zA-Z]+) (?P<last>[a-zA-Z]+)")
 		//		ret := re.SubexpNames()
 		//		answers := []string{
 		//			"", "first", "last", // [0] is always the empty string.
 		//		}
 		//		equals_as(t, ret, answers)
+	}
+	{
+		// QuoteMeta
+		var check = func(expr, answer string) {
+			ret := RE2QuoteMeta(expr)
+			prevRet := regexp.QuoteMeta(expr)
+
+			if !equals_s(t, ret, answer) {
+				detailErrorParent(t, "wrong")
+			}
+			if !equals_s(t, prevRet, answer) {
+				detailErrorParent(t, "wrong")
+			}
+			if !equals_s(t, ret, prevRet) {
+				detailErrorParent(t, "wrong")
+			}
+		}
+		check("[foo]", `\[foo\]`)
+		check("a*", `a\*`)
+		check("()", `\(\)`)
+		check("?", `\?`)
+		//		check("[[:lower:]]", `\[\[:lower:\]\]`) // re2では`\[\[\:lower\:\]\]`となる
 	}
 }
