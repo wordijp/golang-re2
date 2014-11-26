@@ -1,7 +1,6 @@
 package re2
 
 import (
-	"regexp"
 	"testing"
 )
 
@@ -56,14 +55,6 @@ func TestReplaceRE2InvalidSequences(t *testing.T) {
 const (
 	repl = "@$1@"
 )
-
-func BenchmarkReplaceRegexp(b *testing.B) {
-	re := regexp.MustCompile("([a-z][0-9]+)")
-	str := "hoge1 fuga2"
-	for i := 0; i < b.N; i++ {
-		_ = re.ReplaceAllString(str, repl)
-	}
-}
 
 func BenchmarkReplaceRE2Sequences(b *testing.B) {
 	bytes := []byte(repl)
