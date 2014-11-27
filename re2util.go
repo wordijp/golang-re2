@@ -1,13 +1,12 @@
 package re2
 
-import (
-	"bytes"
-)
+import ()
 
 // $nを\\nへ置換
 // (Goのregexpのsequenceは$nだが、re2のsequenceは\\n)
 func replaceRE2Sequences(b []byte) []byte {
-	var buf bytes.Buffer
+
+	var buf []byte
 
 	escape := false
 	digit := false
@@ -20,42 +19,41 @@ func replaceRE2Sequences(b []byte) []byte {
 		case x == '$':
 			digit = false
 			if escape {
-				buf.WriteByte('$')
+				buf = append(buf, '$')
 			}
 			escape = true
 			break
 
 		case n >= 0 && n <= 9:
+
 			if !digit && escape {
-				buf.WriteByte('\\')
+				buf = append(buf, '\\')
 				digit = true
 				escape = false
 			}
-			buf.WriteByte(x)
+			buf = append(buf, x)
 			break
 
 		default:
 			digit = false
 			if escape {
-				buf.WriteByte('$')
+				buf = append(buf, '$')
 				escape = false
 			}
-			buf.WriteByte(x)
+			buf = append(buf, x)
 			break
 		}
 	}
 
 	if escape {
-		buf.WriteByte('$')
+		buf = append(buf, '$')
 	}
 
-	ret := make([]byte, buf.Len(), buf.Len()+1)
-	buf.Read(ret)
-	return ret
+	return buf
 }
 
 func replaceRE2InvalidSequences(b []byte) []byte {
-	var buf bytes.Buffer
+	var buf []byte
 
 	escape := false
 	digit := false
@@ -68,38 +66,35 @@ func replaceRE2InvalidSequences(b []byte) []byte {
 		case x == '\\':
 			digit = false
 			if escape {
-				buf.WriteRune('\\')
+				buf = append(buf, '\\')
 			}
 			escape = true
 			break
 
 		case n >= 0 && n <= 9:
 			if !digit && escape {
-				buf.WriteRune('\\')
-				buf.WriteRune('\\')
+				buf = append(buf, '\\')
+				buf = append(buf, '\\')
 				digit = true
 				escape = false
 			}
-			buf.WriteByte(x)
+			buf = append(buf, x)
 			break
 
 		default:
 			digit = false
 			if escape {
-				buf.WriteRune('\\')
+				buf = append(buf, '\\')
 				escape = false
 			}
-			buf.WriteByte(x)
+			buf = append(buf, x)
 			break
 		}
 	}
 
 	if escape {
-		buf.WriteRune('\\')
+		buf = append(buf, '\\')
 	}
 
-	tmp := make([]byte, buf.Len(), buf.Len()+1)
-	buf.Read(tmp)
-
-	return tmp
+	return buf
 }
