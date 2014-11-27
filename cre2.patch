@@ -1,0 +1,42 @@
+diff --git a/src/cre2.h b/src/cre2.h
+index be17ac1..e2a42fc 100644
+--- a/src/cre2.h
++++ b/src/cre2.h
+@@ -153,6 +153,27 @@ cre2_decl void cre2_strings_to_ranges (const char * text, cre2_range_t * ranges,
+  ** Other matching functions.
+  ** ----------------------------------------------------------------- */
+ 
++cre2_decl int cre2_full_match (const char * pattern, const cre2_string_t * text,
++				      cre2_string_t * match, int nmatch);
++cre2_decl int cre2_partial_match (const char * pattern, const cre2_string_t * text,
++				      cre2_string_t * match, int nmatch);
++
++cre2_decl int cre2_consume (const char * pattern, cre2_string_t * text,
++				       cre2_string_t * match, int nmatch);
++cre2_decl int cre2_find_and_consume (const char * pattern, cre2_string_t * text,
++				       cre2_string_t * match, int nmatch);
++
++cre2_decl int cre2_full_match_re (cre2_regexp_t * rex, const cre2_string_t * text,
++				  cre2_string_t * match, int nmatch);
++cre2_decl int cre2_partial_match_re (cre2_regexp_t * rex, const cre2_string_t * text,
++				  cre2_string_t * match, int nmatch);
++
++cre2_decl int cre2_consume_re (cre2_regexp_t * rex, cre2_string_t * text,
++				   cre2_string_t * match, int nmatch);
++cre2_decl int cre2_find_and_consume_re (cre2_regexp_t * rex, cre2_string_t * text,
++				   cre2_string_t * match, int nmatch);
++
++/*
+ typedef int cre2_match_stringz_fun_t (const char * pattern, const cre2_string_t * text,
+ 				      cre2_string_t * match, int nmatch);
+ 
+@@ -174,8 +195,8 @@ cre2_decl cre2_match_rex_fun_t		cre2_full_match_re;
+ cre2_decl cre2_match_rex_fun_t		cre2_partial_match_re;
+ cre2_decl cre2_match_rex2_fun_t		cre2_consume_re;
+ cre2_decl cre2_match_rex2_fun_t		cre2_find_and_consume_re;
++*/
+ 
+-
+ /** --------------------------------------------------------------------
+  ** Problematic functions.
+  ** ----------------------------------------------------------------- */

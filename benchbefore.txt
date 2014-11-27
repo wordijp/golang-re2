@@ -1,0 +1,42 @@
+* Find ReaderIndex not implemented *
+* FindReaderSubmatchIndex not implemented *
+* LiteralPrefix not implemented *
+* MatchReader not implemented *
+* ReplaceAllFunc not implemented *
+* ReplaceAllStringFunc not implemented *
+* SubexpNames not implemented *
+PASS
+BenchmarkCompile	  200000	     11357 ns/op
+BenchmarkExpand	 1000000	      1304 ns/op
+BenchmarkExpandString	 2000000	       975 ns/op
+BenchmarkFind	 1000000	      2687 ns/op
+BenchmarkFindAll	  200000	      8065 ns/op
+BenchmarkFindAllIndex	  200000	      8075 ns/op
+BenchmarkFindAllString	  200000	      7990 ns/op
+BenchmarkFindAllStringIndex	  200000	      8025 ns/op
+BenchmarkFindAllStringSubmatch	  200000	      8310 ns/op
+BenchmarkFindAllStringSubmatchIndex	  200000	      8055 ns/op
+BenchmarkFindAllSubmatch	  200000	      8535 ns/op
+BenchmarkFindAllSubmatchIndex	  200000	      8155 ns/op
+BenchmarkFindIndex	 1000000	      2684 ns/op
+BenchmarkFindString	 1000000	      2672 ns/op
+BenchmarkFindStringIndex	 1000000	      2674 ns/op
+BenchmarkFindStringSubmatch	 1000000	      3014 ns/op
+BenchmarkFindStringSubmatchIndex	 1000000	      2900 ns/op
+BenchmarkFindSubmatch	  500000	      3052 ns/op
+BenchmarkFindSubmatchIndex	  500000	      2893 ns/op
+BenchmarkLongest	20000000	        81.9 ns/op
+BenchmarkMatchStatic	  200000	     13854 ns/op
+BenchmarkMatchStringStatic	  200000	     13899 ns/op
+BenchmarkMatch	 1000000	      2380 ns/op
+BenchmarkMatchString	 1000000	      2360 ns/op
+BenchmarkNumSubexp	2000000000	         0.31 ns/op
+BenchmarkReplaceAll	 1000000	      2357 ns/op
+BenchmarkReplaceAllLiteral	 1000000	      2078 ns/op
+BenchmarkReplaceAllLiteralString	 1000000	      2145 ns/op
+BenchmarkReplaceAllString	 1000000	      2332 ns/op
+BenchmarkSplit	 1000000	      3091 ns/op
+BenchmarkString	2000000000	         1.23 ns/op
+BenchmarkQuoteMeta	10000000	       282 ns/op
+BenchmarkReplaceRE2Sequences	20000000	       106 ns/op
+ok  	github.com/wordijp/golang-re2	222.056s
