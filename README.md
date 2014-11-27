@@ -14,9 +14,11 @@ LICENSEに記載(The MIT License(MIT))
 C++製のRE2と、[RE2のCラッパーライブラリであるCRE2](https://github.com/marcomaggi/cre2)の事前インストールが必要です。
 なお、CRE2の一部関数は、そのままではcgoによるinclude時にエラーになりますので、cre2.hに対して下記のpatchファイル、cre2.patchを適用します
 
+```
   $ cp ./cre2.patch CRE2インストールディレクトリ/cre2/
   $ cd CRE2インストールディレクトリ/cre2
   $ patch -p1 < cre2.patch
+```
 
 ## Usage
 
@@ -31,6 +33,8 @@ regexpパッケージと動作の違う一部のメソッド(ReplaceAll等)は�
 
 ## Benchmark
 ### regexpパッケージと置き換え後のベンチマーク比較
+
+```
 $ benchcmp benchbefore.txt benchafter.txt
 benchmark                               old ns/op     new ns/op     delta
 BenchmarkCompile                        11357         27268         +140.10%
@@ -66,6 +70,7 @@ BenchmarkSplit                          3091          2141          -30.73%
 BenchmarkString                         1.23          97.2          +7802.44%
 BenchmarkQuoteMeta                      282           991           +251.42%
 BenchmarkReplaceRE2Sequences            106           114           +7.55%
+```
 
 数Byte、数十Byteのバイト列に対してのベンチーマークです、
 Find系は一律高速化されているのに対して、
@@ -75,8 +80,10 @@ ReplaceAll(Literal | LiteralString | String)はGoからCを呼ぶオーバーヘ
 しかし、対象のバイト列が十数KB以上になると、ReplaceAll系はこのラッパーライブラリの方が高速になります、
 例えば、走れメロスの全文が記載されている30,895Byteのテキストファイル内の「メ.ス」を「ドラ○もん」に置換する場合、
 
+```
 benchmark          old ns/op     new ns/op     delta
 BenchmarkMelos     400067        211841        -47.05%
+```
 
 となります。
 
@@ -138,5 +145,3 @@ regexpパッケージでのベンチマーク結果取得時のコミット・�
   「Revert "ベンチマーク処理をregexp版の使用に戻した"」 :  85f43a6b0a0ecaaa249c13983e6f493dc4b434d4
   benchafter.txt
 
-
-[![Build Status](https://drone.io/github.com/wordijp/golang-re2/status.png)](https://drone.io/github.com/wordijp/golang-re2/latest)
