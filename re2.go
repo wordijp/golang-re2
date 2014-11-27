@@ -16,19 +16,18 @@ import (
 	"fmt"
 	"math"
 	"unsafe"
+	//	"runtime"
 )
-
-// NOTE : ベンチの結果、string -> []byteへの変換は、Readerを通してReadした方が約倍速い(その変わり冗長になる)(Ver1.3.3)
-// b := []byte(s)
-// ↓こっちの方が高速
-// r := strings.NewReader(s)
-// b := make([]byte, r.Len())
-// r.Read(b)
 
 // XXX : Reader系は未実装
 //       (ファイルハンドラをStringPieceを引数で受け取るre2ラッパーに渡す上手い方法が思いつかない)
 
 // XXX : String系は、内部で[]byteへの変換をしているため、文字列の値コピー分のオーバーヘッドが余計にかかっている
+
+// XXX : (Must)?Compile(POSIX)?や、Longestのパフォーマンスが、regexpパッケージに比べて著しく遅い
+
+// NOTE : regexpパッケージのRegexpと同じ動作になるようにしているが、
+//        動作が違う一部のメソッドはRE2というprefixを付けて差別化を図っている(ex:ReplaceAll)
 
 // regexpインスタンスを解放する処理を担う
 // NOTE : メソッドはregexpと統一しているが、このライブラリだと解放処理が必要なので、
@@ -39,9 +38,13 @@ func (c *Closer) Close(re *Regexp) {
 	if re != nil {
 		C.cre2_delete(unsafe.Pointer(re.cre2_re))
 		C.cre2_delete(unsafe.Pointer(re.cre2_re_with_bracket))
-		C.cre2_opt_delete(unsafe.Pointer(re.c_opt))
+		C.cre2_opt_delete(unsafe.Pointer(re.cre2_opt))
 		C.free(unsafe.Pointer(re.c_expr))
 		C.free(unsafe.Pointer(re.c_expr_with_bracket))
+
+		// GCが追い付かずにメモリアロケートが失敗する時に有効化
+		// 普段使いだとまず気にする必要はないはず
+		// runtime.GC()
 	}
 }
 
@@ -50,7 +53,7 @@ func (c *Closer) Close(re *Regexp) {
 type Regexp struct {
 	cre2_re                    *C.cre2_regexp_t
 	cre2_re_with_bracket       *C.cre2_regexp_t
-	c_opt                      *C.cre2_options_t
+	cre2_opt                   *C.cre2_options_t
 	c_expr                     *C.char
 	c_expr_length              C.int
 	c_expr_with_bracket        *C.char
@@ -123,19 +126,19 @@ func compile(expr string, posix, longest bool) (*Regexp, *Closer, error) {
 	c_expr_length := C.int(len(expr))
 	c_expr_with_bracket := C.CString("(" + expr + ")") // RE2のFindAndConsume用に()を付与
 	c_expr_with_bracket_length := C.int(len(expr) + 2)
-	c_opt := makeOptions(posix, longest, false)
+	cre2_opt := makeOptions(posix, longest, false)
 
 	closer := &Closer{}
 
 	// XXX : cre2_newのコストが数倍になっている
 
 	// ()無し
-	cre2_re := C.cre2_new(c_expr, c_expr_length, unsafe.Pointer(c_opt))
+	cre2_re := C.cre2_new(c_expr, c_expr_length, unsafe.Pointer(cre2_opt))
 	errCode := C.cre2_error_code(cre2_re)
 	if errCode != C.CRE2_NO_ERROR {
 
 		C.cre2_delete(unsafe.Pointer(cre2_re))
-		C.cre2_opt_delete(unsafe.Pointer(c_opt))
+		C.cre2_opt_delete(unsafe.Pointer(cre2_opt))
 		C.free(unsafe.Pointer(c_expr))
 		C.free(unsafe.Pointer(c_expr_with_bracket))
 
@@ -143,13 +146,13 @@ func compile(expr string, posix, longest bool) (*Regexp, *Closer, error) {
 	}
 
 	// ()有り
-	cre2_re_with_bracket := C.cre2_new(c_expr_with_bracket, c_expr_with_bracket_length, unsafe.Pointer(c_opt))
+	cre2_re_with_bracket := C.cre2_new(c_expr_with_bracket, c_expr_with_bracket_length, unsafe.Pointer(cre2_opt))
 	errCode = C.cre2_error_code(cre2_re)
 	if errCode != C.CRE2_NO_ERROR {
 
 		C.cre2_delete(unsafe.Pointer(cre2_re))
 		C.cre2_delete(unsafe.Pointer(cre2_re_with_bracket))
-		C.cre2_opt_delete(unsafe.Pointer(c_opt))
+		C.cre2_opt_delete(unsafe.Pointer(cre2_opt))
 		C.free(unsafe.Pointer(c_expr))
 		C.free(unsafe.Pointer(c_expr_with_bracket))
 
@@ -159,7 +162,7 @@ func compile(expr string, posix, longest bool) (*Regexp, *Closer, error) {
 	re := &Regexp{
 		cre2_re:                    (*C.cre2_regexp_t)(cre2_re),
 		cre2_re_with_bracket:       (*C.cre2_regexp_t)(cre2_re_with_bracket),
-		c_opt:                      c_opt,
+		cre2_opt:                   cre2_opt,
 		c_expr:                     c_expr,
 		c_expr_length:              c_expr_length,
 		c_expr_with_bracket:        c_expr_with_bracket,
@@ -520,11 +523,11 @@ func (re *Regexp) FindSubmatchIndex(b []byte) []int {
 
 // NOTE : re2のoptionsは変更出来ないので、インスタンスを作り変える
 func (re *Regexp) Longest() {
-	longest := C.cre2_opt_longest_match(unsafe.Pointer(re.c_opt))
+	longest := C.cre2_opt_longest_match(unsafe.Pointer(re.cre2_opt))
 	if bool(longest != 0) {
 		return // do not need
 	}
-	posix := C.cre2_opt_posix_syntax(unsafe.Pointer(re.c_opt))
+	posix := C.cre2_opt_posix_syntax(unsafe.Pointer(re.cre2_opt))
 
 	// インスタンスの作り変え
 	newOpt := makeOptions(bool(posix != 0), true, false)
@@ -533,11 +536,11 @@ func (re *Regexp) Longest() {
 
 	C.cre2_delete(unsafe.Pointer(re.cre2_re))
 	C.cre2_delete(unsafe.Pointer(re.cre2_re_with_bracket))
-	C.cre2_opt_delete(unsafe.Pointer(re.c_opt))
+	C.cre2_opt_delete(unsafe.Pointer(re.cre2_opt))
 
 	re.cre2_re = (*C.cre2_regexp_t)(newOrigRe)
 	re.cre2_re_with_bracket = (*C.cre2_regexp_t)(newOrigRe_with_bracket)
-	re.c_opt = newOpt
+	re.cre2_opt = newOpt
 }
 
 func (re *Regexp) Match(b []byte) bool {
