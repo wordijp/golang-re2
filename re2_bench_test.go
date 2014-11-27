@@ -1,7 +1,6 @@
 package re2
 
 import (
-	"regexp"
 	"testing"
 )
 
@@ -11,13 +10,15 @@ func BenchmarkCompile(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = regexp.MustCompile(expr)
+		re, closer := MustCompile(expr)
+		defer closer.Close(re)
 	}
 }
 
 func BenchmarkExpand(b *testing.B) {
 	expr := `.*name\s+is\s+(.+)\.`
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	src := []byte(`
 		my name is tom.
@@ -33,14 +34,15 @@ func BenchmarkExpand(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for _, x := range indexes {
-			_ = re.Expand(dst, template, src, x)
+			_ = re.RE2Expand(dst, template, src, x)
 		}
 	}
 }
 
 func BenchmarkExpandString(b *testing.B) {
 	expr := `.*name\s+is\s+(.+)\.`
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	src := `
 		my name is tom.
@@ -56,14 +58,15 @@ func BenchmarkExpandString(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for _, x := range indexes {
-			_ = re.ExpandString(dst, template, src, x)
+			_ = re.RE2ExpandString(dst, template, src, x)
 		}
 	}
 }
 
 func BenchmarkFind(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -76,7 +79,8 @@ func BenchmarkFind(b *testing.B) {
 
 func BenchmarkFindAll(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -89,7 +93,8 @@ func BenchmarkFindAll(b *testing.B) {
 
 func BenchmarkFindAllIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -102,7 +107,8 @@ func BenchmarkFindAllIndex(b *testing.B) {
 
 func BenchmarkFindAllString(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -115,7 +121,8 @@ func BenchmarkFindAllString(b *testing.B) {
 
 func BenchmarkFindAllStringIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -128,7 +135,8 @@ func BenchmarkFindAllStringIndex(b *testing.B) {
 
 func BenchmarkFindAllStringSubmatch(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -141,7 +149,8 @@ func BenchmarkFindAllStringSubmatch(b *testing.B) {
 
 func BenchmarkFindAllStringSubmatchIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -154,7 +163,8 @@ func BenchmarkFindAllStringSubmatchIndex(b *testing.B) {
 
 func BenchmarkFindAllSubmatch(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -167,7 +177,8 @@ func BenchmarkFindAllSubmatch(b *testing.B) {
 
 func BenchmarkFindAllSubmatchIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -180,7 +191,8 @@ func BenchmarkFindAllSubmatchIndex(b *testing.B) {
 
 func BenchmarkFindIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -193,7 +205,8 @@ func BenchmarkFindIndex(b *testing.B) {
 
 func BenchmarkFindString(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -206,7 +219,8 @@ func BenchmarkFindString(b *testing.B) {
 
 func BenchmarkFindStringIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -219,7 +233,8 @@ func BenchmarkFindStringIndex(b *testing.B) {
 
 func BenchmarkFindStringSubmatch(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -232,7 +247,8 @@ func BenchmarkFindStringSubmatch(b *testing.B) {
 
 func BenchmarkFindStringSubmatchIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -245,7 +261,8 @@ func BenchmarkFindStringSubmatchIndex(b *testing.B) {
 
 func BenchmarkFindSubmatch(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -258,7 +275,8 @@ func BenchmarkFindSubmatch(b *testing.B) {
 
 func BenchmarkFindSubmatchIndex(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -274,7 +292,8 @@ func BenchmarkLongest(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 
-		re := regexp.MustCompile("hoge")
+		re, closer := MustCompile("hoge")
+		defer closer.Close(re)
 
 		b.StartTimer()
 
@@ -291,7 +310,7 @@ func BenchmarkMatchStatic(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = regexp.Match(expr, bytes)
+		_, _ = Match(expr, bytes)
 	}
 }
 
@@ -302,13 +321,14 @@ func BenchmarkMatchStringStatic(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = regexp.MatchString(expr, s)
+		_, _ = MatchString(expr, s)
 	}
 }
 
 func BenchmarkMatch(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
@@ -321,7 +341,8 @@ func BenchmarkMatch(b *testing.B) {
 
 func BenchmarkMatchString(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc :super tom: abc :hyper bob: :tom: abc"
 
@@ -334,7 +355,8 @@ func BenchmarkMatchString(b *testing.B) {
 
 func BenchmarkNumSubexp(b *testing.B) {
 	expr := "([a-z])"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	b.ResetTimer()
 
@@ -345,7 +367,8 @@ func BenchmarkNumSubexp(b *testing.B) {
 
 func BenchmarkReplaceAll(b *testing.B) {
 	expr := "a(x*)b"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("-ab-axxb-")
 	repl := []byte("$1")
@@ -353,13 +376,14 @@ func BenchmarkReplaceAll(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = re.ReplaceAll(bytes, repl)
+		_ = re.RE2ReplaceAll(bytes, repl)
 	}
 }
 
 func BenchmarkReplaceAllLiteral(b *testing.B) {
 	expr := "a(x*)b"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	bytes := []byte("-ab-axxb-")
 	repl := []byte("@$1@")
@@ -373,7 +397,8 @@ func BenchmarkReplaceAllLiteral(b *testing.B) {
 
 func BenchmarkReplaceAllLiteralString(b *testing.B) {
 	expr := "a(x*)b"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "-ab-axxb-"
 	repl := "@$1@"
@@ -387,7 +412,8 @@ func BenchmarkReplaceAllLiteralString(b *testing.B) {
 
 func BenchmarkReplaceAllString(b *testing.B) {
 	expr := "a(x*)b"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "-ab-axxb-"
 	repl := "$1"
@@ -395,13 +421,14 @@ func BenchmarkReplaceAllString(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = re.ReplaceAllString(s, repl)
+		_ = re.RE2ReplaceAllString(s, repl)
 	}
 }
 
 func BenchmarkSplit(b *testing.B) {
 	expr := "[0-9](;)"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	s := "abc;123;ABC;45;"
 
@@ -414,7 +441,8 @@ func BenchmarkSplit(b *testing.B) {
 
 func BenchmarkString(b *testing.B) {
 	expr := ":([^: ]*)\\s*tom:"
-	re := regexp.MustCompile(expr)
+	re, closer := MustCompile(expr)
+	defer closer.Close(re)
 
 	b.ResetTimer()
 
@@ -429,6 +457,6 @@ func BenchmarkQuoteMeta(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = regexp.QuoteMeta(expr)
+		_ = RE2QuoteMeta(expr)
 	}
 }
