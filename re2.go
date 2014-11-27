@@ -1,6 +1,6 @@
 package re2
 
-// #cgo LDFLAGS: -L. -lcre2
+// #cgo LDFLAGS: -lcre2
 // #include "cre2.h"
 // #include <stdlib.h>
 // int length_ptr(char *begin, char *end) {
