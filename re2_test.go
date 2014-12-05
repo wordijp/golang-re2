@@ -8,6 +8,9 @@ import (
 	"testing"
 )
 
+// XXX : テストの共通処理を個別に書いてる為、抜けの発生が起こる
+// TODO : テストの共通処理をまとめる
+
 func TestCompile(t *testing.T) {
 
 	// test wrong text
@@ -110,17 +113,13 @@ func TestExpand(t *testing.T) {
 
 	//	expr := `.*name\s+is\s+(?P<name>.+)\.` // re2ではタグを使えない
 	expr := `.*name\s+is\s+(.+)\.`
-	re, closer := MustCompile(expr)
-	defer closer.Close(re)
 
-	prevRe := regexp.MustCompile(expr)
-
-	src := []byte(`
-		my name is tom.
-		my favorite food is sushi.
-		hello, my name is bob.
-		he name is hiroshi.
-	`)
+	bytes := []byte(`
+			my name is tom.
+			my favorite food is sushi.
+			hello, my name is bob.
+			he name is hiroshi.
+		`)
 	answers := []string{
 		"prefix name = tom",
 		"prefix name = bob",
@@ -129,37 +128,75 @@ func TestExpand(t *testing.T) {
 
 	{
 		// Expand
-		var check = func(src []byte, answers []string) {
+		var check = func(expr string, bytes []byte, answers []string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			var ret []string
-			for _, x := range re.FindAllSubmatchIndex(src, -1) {
-				r := re.RE2Expand([]byte("prefix "), []byte("name = $1"), src, x)
+			for _, x := range re.FindAllSubmatchIndex(bytes, -1) {
+				r := re.RE2Expand([]byte("prefix "), []byte("name = $1"), bytes, x)
 				ret = append(ret, string(r))
 			}
 
 			var prevRet []string
-			for _, x := range prevRe.FindAllSubmatchIndex(src, -1) {
-				r := prevRe.Expand([]byte("prefix "), []byte("name = $1"), src, x)
+			for _, x := range prevRe.FindAllSubmatchIndex(bytes, -1) {
+				r := prevRe.Expand([]byte("prefix "), []byte("name = $1"), bytes, x)
 				prevRet = append(prevRet, string(r))
 			}
 
-			equals_as(t, ret, answers)
-			equals_as(t, prevRet, answers)
-			equals_as(t, ret, prevRet)
+			if !equals_as(t, ret, answers) {
+				detailErrorParent(t, "wrong.")
+			}
+			if !equals_as(t, prevRet, answers) {
+				detailErrorParent(t, "wrong.")
+			}
+			if !equals_as(t, ret, prevRet) {
+				detailErrorParent(t, "wrong.")
+			}
 		}
-		check(src, answers)
+		check(expr, bytes, answers)
+		check("(a*)", []byte("abc"),
+			[]string{
+				"prefix name = a",
+				"prefix name = ",
+				"prefix name = ",
+			},
+		)
+		check("a*", []byte("bc"),
+			[]string{
+				"prefix name = ",
+				"prefix name = ",
+				"prefix name = ",
+			},
+		)
+		check("a*", []byte(""),
+			[]string{
+				"prefix name = ",
+			},
+		)
+		check("a", []byte(""),
+			[]string{},
+		)
 	}
 	{
 		// ExpandString
-		var check = func(src []byte, answers []string) {
+		var check = func(expr string, s string, answers []string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			var ret []string
-			for _, x := range re.FindAllSubmatchIndex(src, -1) {
-				r := re.RE2ExpandString([]byte("prefix "), "name = $1", string(src), x)
+			for _, x := range re.FindAllSubmatchIndex([]byte(s), -1) {
+				r := re.RE2ExpandString([]byte("prefix "), "name = $1", s, x)
 				ret = append(ret, string(r))
 			}
 
 			var prevRet []string
-			for _, x := range prevRe.FindAllSubmatchIndex(src, -1) {
-				r := prevRe.ExpandString([]byte("prefix "), "name = $1", string(src), x)
+			for _, x := range prevRe.FindAllSubmatchIndex([]byte(s), -1) {
+				r := prevRe.ExpandString([]byte("prefix "), "name = $1", s, x)
 				prevRet = append(prevRet, string(r))
 			}
 
@@ -167,42 +204,74 @@ func TestExpand(t *testing.T) {
 			equals_as(t, prevRet, answers)
 			equals_as(t, ret, prevRet)
 		}
-		check(src, answers)
+		check(expr, string(bytes), answers)
+		check("(a*)", "abc",
+			[]string{
+				"prefix name = a",
+				"prefix name = ",
+				"prefix name = ",
+			},
+		)
+		check("a*", "bc",
+			[]string{
+				"prefix name = ",
+				"prefix name = ",
+				"prefix name = ",
+			},
+		)
+		check("a*", "",
+			[]string{
+				"prefix name = ",
+			},
+		)
+		check("a", "",
+			[]string{},
+		)
+
 	}
 }
 
 func TestFind(t *testing.T) {
+
+	// XXX : checkメソッドの引数名と被っているため、typo時に不思議なバグになってしまう
 	expr := ":([^: ]*)\\s*tom:"
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 	//                   |     |    |                |    |
 	//                   4    10   15               32   37
 
-	re, closer := MustCompile(expr)
-	defer closer.Close(re)
-
-	prevRe := regexp.MustCompile(expr)
-
 	{
 		// Find
-		var check = func(bytes []byte, answer string) {
+		var check = func(expr string, bytes []byte, answer string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.Find(bytes)
-			if ret == nil {
-				detailError(t, "Find is failed")
-			}
 			prevRet := prevRe.Find(bytes)
-			if prevRet == nil {
-				detailError(t, "Find is failed")
+
+			if (ret != nil) != (prevRet != nil) {
+				detailError(t, "wrong. ret?:", ret != nil, " prevRet?:", prevRet != nil)
 			}
 
 			equals_s(t, string(ret), answer)
 			equals_s(t, string(prevRet), answer)
 			equals_s(t, string(ret), string(prevRet))
 		}
-		check(bytes, ":super tom:")
+		check(expr, bytes, ":super tom:")
+		check("a*", []byte("abc"), "a")
+		check("a*", []byte("bc"), "")
+		check("a*", []byte(""), "")
+		check("a", []byte(""), "")
 	}
 	{
 		// FindAll
-		var check = func(bytes []byte, answers []string) {
+		var check = func(expr string, bytes []byte, answers []string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			var ret []string
 			for _, x := range re.FindAll(bytes, -1) {
 				ret = append(ret, string(x))
@@ -221,30 +290,71 @@ func TestFind(t *testing.T) {
 			":super tom:",
 			":tom:",
 		}
-		check(bytes, answers)
-
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"), []string{"a", "", ""})
+		check("a*", []byte("bc"), []string{"", "", ""})
+		check("a*", []byte(""), []string{""})
+		check("a", []byte(""), []string{})
 	}
 	{
 		// FindAllIndex
-		var check = func(bytes []byte, answers [][]int) {
+		var check = func(expr string, bytes []byte, answers [][]int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindAllIndex(bytes, -1)
 			prevRet := prevRe.FindAllIndex(bytes, -1)
 
-			equals_aai(t, ret, answers)
-			equals_aai(t, prevRet, answers)
-			equals_aai(t, ret, prevRet)
+			if !equals_aai(t, ret, answers) {
+				detailErrorParent(t, "wrong.")
+			}
+			if !equals_aai(t, prevRet, answers) {
+				detailErrorParent(t, "wrong.")
+			}
+			if !equals_aai(t, ret, prevRet) {
+				detailErrorParent(t, "wrong.")
+			}
 		}
 		answers := [][]int{
 			{4, 15},  // :super tom:
 			{32, 37}, // :tom:
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[][]int{
+				{0, 1}, // "a"
+				{2, 2}, // ""
+				{3, 3}, // ""
+			},
+		)
+		check("a*", []byte("bc"),
+			[][]int{
+				{0, 0}, // ""
+				{1, 1}, // ""
+				{2, 2}, // ""
+			},
+		)
+		check("a*", []byte(""),
+			[][]int{
+				{0, 0},
+			},
+		)
+		check("a", []byte(""),
+			[][]int{},
+		)
 	}
 	{
 		// FindAllString
-		var check = func(bytes []byte, answers []string) {
-			ret := re.FindAllString(string(bytes), -1)
-			prevRet := prevRe.FindAllString(string(bytes), -1)
+		var check = func(expr string, s string, answers []string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindAllString(s, -1)
+			prevRet := prevRe.FindAllString(s, -1)
 
 			equals_as(t, ret, answers)
 			equals_as(t, prevRet, answers)
@@ -254,13 +364,22 @@ func TestFind(t *testing.T) {
 			":super tom:",
 			":tom:",
 		}
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc", []string{"a", "", ""})
+		check("a*", "bc", []string{"", "", ""})
+		check("a*", "", []string{""})
+		check("a", "", []string{})
 	}
 	{
 		// FindAllStringIndex
-		var check = func(bytes []byte, answers [][]int) {
-			ret := re.FindAllStringIndex(string(bytes), -1)
-			prevRet := prevRe.FindAllStringIndex(string(bytes), -1)
+		var check = func(expr string, s string, answers [][]int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindAllStringIndex(s, -1)
+			prevRet := prevRe.FindAllStringIndex(s, -1)
 
 			equals_aai(t, ret, answers)
 			equals_aai(t, prevRet, answers)
@@ -270,11 +389,38 @@ func TestFind(t *testing.T) {
 			{4, 15},  // :super tom:
 			{32, 37}, // :tom:
 		}
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc",
+			[][]int{
+				{0, 1}, // "a"
+				{2, 2}, // ""
+				{3, 3}, // ""
+			},
+		)
+		check("a*", "bc",
+			[][]int{
+				{0, 0}, // ""
+				{1, 1}, // ""
+				{2, 2}, // ""
+			},
+		)
+		check("a*", "",
+			[][]int{
+				{0, 0},
+			},
+		)
+		check("a", "",
+			[][]int{},
+		)
 	}
 	{
 		// FindAllStringSubmatch
-		var check = func(bytes []byte, answers [][]string) {
+		var check = func(expr string, bytes []byte, answers [][]string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindAllStringSubmatch(string(bytes), -1)
 			prevRet := prevRe.FindAllStringSubmatch(string(bytes), -1)
 
@@ -286,13 +432,40 @@ func TestFind(t *testing.T) {
 			{":super tom:", "super"},
 			{":tom:", ""},
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[][]string{
+				{"a"},
+				{""},
+				{""},
+			},
+		)
+		check("a*", []byte("bc"),
+			[][]string{
+				{""},
+				{""},
+				{""},
+			},
+		)
+		check("a*", []byte(""),
+			[][]string{
+				{""},
+			},
+		)
+		check("a", []byte(""),
+			[][]string{},
+		)
 	}
 	{
 		// FindAllStringSubmatchIndex
-		var check = func(bytes []byte, answers [][]int) {
-			ret := re.FindAllStringSubmatchIndex(string(bytes), -1)
-			prevRet := prevRe.FindAllStringSubmatchIndex(string(bytes), -1)
+		var check = func(expr string, s string, answers [][]int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindAllStringSubmatchIndex(s, -1)
+			prevRet := prevRe.FindAllStringSubmatchIndex(s, -1)
 
 			equals_aai(t, ret, answers)
 			equals_aai(t, prevRet, answers)
@@ -302,11 +475,38 @@ func TestFind(t *testing.T) {
 			{4, 15, 5, 10},   // {":super tom:", "super"},
 			{32, 37, 33, 33}, // {":tom:", ""},
 		}
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc",
+			[][]int{
+				{0, 1}, // "a"
+				{2, 2}, // ""
+				{3, 3}, // ""
+			},
+		)
+		check("a*", "bc",
+			[][]int{
+				{0, 0}, // ""
+				{1, 1}, // ""
+				{2, 2}, // ""
+			},
+		)
+		check("a*", "",
+			[][]int{
+				{0, 0},
+			},
+		)
+		check("a", "",
+			[][]int{},
+		)
 	}
 	{
 		// FindAllSubmatch
-		var check = func(bytes []byte, answers [][][]byte) {
+		var check = func(expr string, bytes []byte, answers [][][]byte) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindAllSubmatch(bytes, -1)
 			prevRet := prevRe.FindAllSubmatch(bytes, -1)
 
@@ -318,27 +518,87 @@ func TestFind(t *testing.T) {
 			{[]byte(":super tom:"), []byte("super")},
 			{[]byte(":tom:"), []byte("")},
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[][][]byte{
+				{[]byte("a")},
+				{[]byte("")},
+				{[]byte("")},
+			},
+		)
+		check("a*", []byte("bc"),
+			[][][]byte{
+				{[]byte("")},
+				{[]byte("")},
+				{[]byte("")},
+			},
+		)
+		check("a*", []byte(""),
+			[][][]byte{
+				{[]byte("")},
+			},
+		)
+		check("a", []byte(""),
+			[][][]byte{},
+		)
 	}
 	{
 		// FindAllSubmatchIndex
-		var check = func(bytes []byte, answers [][]int) {
+		var check = func(expr string, bytes []byte, answers [][]int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindAllSubmatchIndex(bytes, -1)
 			prevRet := prevRe.FindAllSubmatchIndex(bytes, -1)
 
-			equals_aai(t, ret, answers)
-			equals_aai(t, prevRet, answers)
-			equals_aai(t, ret, prevRet)
+			if !equals_aai(t, ret, answers) {
+				detailErrorParent(t, "wrong.")
+			}
+			if !equals_aai(t, prevRet, answers) {
+				detailErrorParent(t, "wrong.")
+			}
+			if !equals_aai(t, ret, prevRet) {
+				detailErrorParent(t, "wrong.")
+			}
 		}
 		answers := [][]int{
 			{4, 15, 5, 10},   // {":super tom:", "super"},
 			{32, 37, 33, 33}, // {":tom:", ""},
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[][]int{
+				{0, 1}, // "a"
+				{2, 2}, // ""
+				{3, 3}, // ""
+			},
+		)
+		check("a*", []byte("bc"),
+			[][]int{
+				{0, 0}, // ""
+				{1, 1}, // ""
+				{2, 2}, // ""
+			},
+		)
+		check("a*", []byte(""),
+			[][]int{
+				{0, 0},
+			},
+		)
+		check("a", []byte(""),
+			[][]int{},
+		)
 	}
 	{
 		// FindIndex
-		var check = func(bytes []byte, answers []int) {
+		var check = func(expr string, bytes []byte, answers []int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindIndex(bytes)
 			prevRet := prevRe.FindIndex(bytes)
 
@@ -349,7 +609,19 @@ func TestFind(t *testing.T) {
 		answers := []int{
 			4, 15,
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[]int{0, 1}, // "a"
+		)
+		check("a*", []byte("bc"),
+			[]int{0, 0}, // ""
+		)
+		check("a*", []byte(""),
+			[]int{0, 0},
+		)
+		check("a", []byte(""),
+			[]int{},
+		)
 	}
 	{
 		// FindReaderIndex
@@ -373,22 +645,36 @@ func TestFind(t *testing.T) {
 	}
 	{
 		// FindString
-		var check = func(bytes []byte, answers string) {
-			ret := re.FindString(string(bytes))
-			prevRet := prevRe.FindString(string(bytes))
+		var check = func(expr string, s string, answers string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindString(s)
+			prevRet := prevRe.FindString(s)
 
 			equals_s(t, ret, answers)
 			equals_s(t, prevRet, answers)
 			equals_s(t, ret, prevRet)
 		}
 		answers := ":super tom:"
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc", "a")
+		check("a*", "bc", "")
+		check("a*", "", "")
+		check("a", "", "")
 	}
 	{
 		// FindStringIndex
-		var check = func(bytes []byte, answers []int) {
-			ret := re.FindStringIndex(string(bytes))
-			prevRet := prevRe.FindStringIndex(string(bytes))
+		var check = func(expr string, s string, answers []int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindStringIndex(s)
+			prevRet := prevRe.FindStringIndex(s)
 
 			equals_ai(t, ret, answers)
 			equals_ai(t, prevRet, answers)
@@ -397,13 +683,30 @@ func TestFind(t *testing.T) {
 		answers := []int{
 			4, 15,
 		}
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc",
+			[]int{0, 1}, // "a"
+		)
+		check("a*", "bc",
+			[]int{0, 0}, // ""
+		)
+		check("a*", "",
+			[]int{0, 0},
+		)
+		check("a", "",
+			[]int{},
+		)
 	}
 	{
 		// FindStringSubmatch
-		var check = func(bytes []byte, answers []string) {
-			ret := re.FindStringSubmatch(string(bytes))
-			prevRet := prevRe.FindStringSubmatch(string(bytes))
+		var check = func(expr string, s string, answers []string) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindStringSubmatch(s)
+			prevRet := prevRe.FindStringSubmatch(s)
 
 			equals_as(t, ret, answers)
 			equals_as(t, prevRet, answers)
@@ -412,13 +715,36 @@ func TestFind(t *testing.T) {
 		answers := []string{
 			":super tom:", "super",
 		}
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc",
+			[]string{
+				"a",
+			},
+		)
+		check("a*", "bc",
+			[]string{
+				"",
+			},
+		)
+		check("a*", "",
+			[]string{
+				"",
+			},
+		)
+		check("a", "",
+			[]string{},
+		)
 	}
 	{
 		// FindStringSubmatchIndex
-		var check = func(bytes []byte, answers []int) {
-			ret := re.FindStringSubmatchIndex(string(bytes))
-			prevRet := prevRe.FindStringSubmatchIndex(string(bytes))
+		var check = func(expr string, s string, answers []int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
+			ret := re.FindStringSubmatchIndex(s)
+			prevRet := prevRe.FindStringSubmatchIndex(s)
 
 			equals_ai(t, ret, answers)
 			equals_ai(t, prevRet, answers)
@@ -427,11 +753,28 @@ func TestFind(t *testing.T) {
 		answers := []int{
 			4, 15, 5, 10,
 		}
-		check(bytes, answers)
+		check(expr, string(bytes), answers)
+		check("a*", "abc",
+			[]int{0, 1}, // "a"
+		)
+		check("a*", "bc",
+			[]int{0, 0}, // ""
+		)
+		check("a*", "",
+			[]int{0, 0},
+		)
+		check("a", "",
+			[]int{},
+		)
 	}
 	{
 		// FindSubmatch
-		var check = func(bytes []byte, answers [][]byte) {
+		var check = func(expr string, bytes []byte, answers [][]byte) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindSubmatch(bytes)
 			prevRet := prevRe.FindSubmatch(bytes)
 
@@ -442,11 +785,34 @@ func TestFind(t *testing.T) {
 		answers := [][]byte{
 			[]byte(":super tom:"), []byte("super"),
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[][]byte{
+				[]byte("a"),
+			},
+		)
+		check("a*", []byte("bc"),
+			[][]byte{
+				[]byte(""),
+			},
+		)
+		check("a*", []byte(""),
+			[][]byte{
+				[]byte(""),
+			},
+		)
+		check("a", []byte(""),
+			[][]byte{},
+		)
 	}
 	{
 		// FindSubmatchIndex
-		var check = func(bytes []byte, answers []int) {
+		var check = func(expr string, bytes []byte, answers []int) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.FindSubmatchIndex(bytes)
 			prevRet := prevRe.FindSubmatchIndex(bytes)
 
@@ -457,7 +823,19 @@ func TestFind(t *testing.T) {
 		answers := []int{
 			4, 15, 5, 10,
 		}
-		check(bytes, answers)
+		check(expr, bytes, answers)
+		check("a*", []byte("abc"),
+			[]int{0, 1}, // "a"
+		)
+		check("a*", []byte("bc"),
+			[]int{0, 0}, // ""
+		)
+		check("a*", []byte(""),
+			[]int{0, 0},
+		)
+		check("a", []byte(""),
+			[]int{},
+		)
 	}
 }
 
@@ -545,20 +923,39 @@ func TestLongest(t *testing.T) {
 		"aaBBB",
 		"aaBBB",
 	)
+	check(
+		"a*",
+		"abc",
+		"a",
+		"a",
+	)
+	check(
+		"a*",
+		"bc",
+		"",
+		"",
+	)
+	check(
+		"a*",
+		"",
+		"",
+		"",
+	)
+	check(
+		"a",
+		"",
+		"",
+		"",
+	)
 }
 
 func TestMatch(t *testing.T) {
 	expr := ":([^: ]*)\\s*tom:"
 	bytes := []byte("abc :super tom: abc :hyper bob: :tom: abc")
 
-	re, closer := MustCompile(expr)
-	defer closer.Close(re)
-
-	prevRe := regexp.MustCompile(expr)
-
 	{
 		// Match (static method)
-		var check = func(expr string, bytes []byte) {
+		var check = func(expr string, bytes []byte, answer bool) {
 			ret, err := Match(expr, bytes)
 			if err != nil {
 				detailErrorfParent(t, "wrong. err:%s", err)
@@ -573,21 +970,25 @@ func TestMatch(t *testing.T) {
 				detailErrorParent(t, "wrong")
 			}
 
-			if !ret {
-				detailErrorParent(t, "not match")
+			if ret != answer {
+				detailErrorParent(t, "wrong")
 			}
-			if !prevRet {
-				detailErrorParent(t, "not match")
+			if prevRet != answer {
+				detailErrorParent(t, "wrong")
 			}
 			if ret != prevRet {
 				detailErrorParent(t, "wrong")
 			}
 		}
-		check(expr, bytes)
+		check(expr, bytes, true)
+		check("a*", []byte("abc"), true)
+		check("a*", []byte("bc"), true)
+		check("a*", []byte(""), true)
+		check("a", []byte(""), false)
 	}
 	{
 		// MatchString (static method)
-		var check = func(expr string, s string) {
+		var check = func(expr string, s string, answer bool) {
 			ret, err := MatchString(expr, s)
 			if err != nil {
 				detailErrorfParent(t, "wrong. err:%s", err)
@@ -602,36 +1003,49 @@ func TestMatch(t *testing.T) {
 				detailErrorParent(t, "wrong")
 			}
 
-			if !ret {
-				detailErrorParent(t, "not match")
+			if ret != answer {
+				detailErrorParent(t, "wrong")
 			}
-			if !prevRet {
-				detailErrorParent(t, "not match")
+			if prevRet != answer {
+				detailErrorParent(t, "wrong")
 			}
 			if ret != prevRet {
 				detailErrorParent(t, "wrong")
 			}
 		}
-		check(expr, string(bytes))
+		check(expr, string(bytes), true)
+		check("a*", "abc", true)
+		check("a*", "bc", true)
+		check("a*", "", true)
+		check("a", "", false)
 	}
 
 	{
 		// Match
-		var check = func(bytes []byte) {
+		var check = func(expr string, bytes []byte, answer bool) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.Match(bytes)
 			prevRet := prevRe.Match(bytes)
 
-			if !ret {
-				detailErrorParent(t, "not match")
+			if ret != answer {
+				detailErrorParent(t, "wrong")
 			}
-			if !prevRet {
-				detailErrorParent(t, "not match")
+			if prevRet != answer {
+				detailErrorParent(t, "wrong")
 			}
 			if ret != prevRet {
 				detailErrorParent(t, "wrong")
 			}
 		}
-		check(bytes)
+		check(expr, bytes, true)
+		check("a*", []byte("abc"), true)
+		check("a*", []byte("bc"), true)
+		check("a*", []byte(""), true)
+		check("a", []byte(""), false)
 	}
 	{
 		fmt.Println("* MatchReader not implemented *")
@@ -641,21 +1055,29 @@ func TestMatch(t *testing.T) {
 	}
 	{
 		// MatchString
-		var check = func(s string) {
+		var check = func(expr string, s string, answer bool) {
+			re, closer := MustCompile(expr)
+			defer closer.Close(re)
+
+			prevRe := regexp.MustCompile(expr)
+
 			ret := re.MatchString(s)
 			prevRet := prevRe.MatchString(s)
 
-			if !ret {
-				detailErrorParent(t, "not match")
+			if ret != answer {
+				detailErrorParent(t, "wrong")
 			}
-			if !prevRet {
-				detailErrorParent(t, "not match")
+			if prevRet != answer {
+				detailErrorParent(t, "wrong")
 			}
 			if ret != prevRet {
 				detailErrorParent(t, "wrong")
 			}
 		}
-		check(string(bytes))
+		check(expr, string(bytes), true)
+		check("a*", "abc", true)
+		check("a*", "bc", true)
+		check("a", "", false)
 	}
 }
 
@@ -892,6 +1314,34 @@ func TestOther(t *testing.T) {
 			[]string{
 				"b", "b", "c", "c", "d", "e",
 			})
+		check(
+			"a",
+			"abc",
+			-1,
+			[]string{
+				"", "bc",
+			})
+		check(
+			"a",
+			"bc",
+			-1,
+			[]string{
+				"bc",
+			})
+		check(
+			"a*",
+			"",
+			-1,
+			[]string{
+				"",
+			})
+		check(
+			"a",
+			"",
+			-1,
+			[]string{
+				"",
+			})
 
 	}
 	{
@@ -910,6 +1360,8 @@ func TestOther(t *testing.T) {
 			equals_s(t, ret, prevRet)
 		}
 		check(":([^: ]*)\\s*tom:")
+		check("a")
+		check("")
 	}
 	{
 		// SubexpNames
@@ -941,6 +1393,7 @@ func TestOther(t *testing.T) {
 		check("a*", `a\*`)
 		check("()", `\(\)`)
 		check("?", `\?`)
+		check("", ``)
 		//		check("[[:lower:]]", `\[\[:lower:\]\]`) // re2では`\[\[\:lower\:\]\]`となる
 	}
 }

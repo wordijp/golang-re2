@@ -30,6 +30,11 @@ import (
 // NOTE : regexpパッケージのRegexpと同じ動作になるようにしているが、
 //        動作が違う一部のメソッドはRE2というprefixを付けて差別化を図っている(ex:ReplaceAll)
 
+// TODO : リファクタリング(重複コード、パターン化された箇所をメソッドにまとめる)
+
+// XXX : FindAllやFindAllSubmatch等の引数bがlen(b) == 0時のコーナーケース対応がとりあえずになっている
+// TODO : リファクタリング(コーナーケースの綺麗な対応)
+
 // regexpインスタンスを解放する処理を担う
 // NOTE : メソッドはregexpと統一しているが、このライブラリだと解放処理が必要なので、
 //        返り値に差異を持たせ、単純置き換え時のClose呼び出し忘れを防ぐ
@@ -86,7 +91,13 @@ func Match(expr string, b []byte) (matched bool, err error) {
 
 func RE2QuoteMeta(s string) string {
 	b := []byte(s)
-	c_input := (*C.char)(unsafe.Pointer(&b[0]))
+
+	var c_input *C.char
+	if len(b) > 0 {
+		c_input = (*C.char)(unsafe.Pointer(&b[0]))
+	} else {
+		c_input = nil
+	}
 	cre2_input := C.cre2_string_t{
 		data:   c_input,
 		length: C.int(len(b)),
@@ -196,15 +207,26 @@ func MustCompilePOSIX(expr string) (*Regexp, *Closer) {
 	return re, closer // regexp.MustCompilePOSIXと違い、Closerも返す
 }
 
+// RE2Expand ...
+// NOTE : RE2Expandは、FindSubmatchIndexの戻り値を利用する方法を想定している
+//        その為、その想定内ならタグが使えない違いしかないが、
+//        RE2Expand単体で使う際は、matchに対する挙動が変わってくる
 func (re *Regexp) RE2Expand(dst []byte, template []byte, src []byte, match []int) []byte {
 
 	text := make([]byte, match[1]-match[0])
 	copy(text, src[match[0]:match[1]])
 
-	c_text := (*C.char)(unsafe.Pointer(&text[0]))
-	cre2_text := C.cre2_string_t{
-		data:   c_text,
-		length: C.int(len(text)),
+	var cre2_text C.cre2_string_t
+	if len(text) > 0 {
+		cre2_text = C.cre2_string_t{
+			data:   (*C.char)(unsafe.Pointer(&text[0])),
+			length: C.int(len(text)),
+		}
+	} else {
+		cre2_text = C.cre2_string_t{
+			data:   nil,
+			length: 0,
+		}
 	}
 
 	re2_rewrite := replaceRE2Sequences(template) // re2用のsequenceへ($n -> \\n)
@@ -242,10 +264,20 @@ func (re *Regexp) Find(b []byte) []byte {
 
 func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 
-	c_input := (*C.char)(unsafe.Pointer(&b[0]))
-	cre2_input := C.cre2_string_t{
-		data:   c_input,
-		length: C.int(len(b)),
+	var c_input *C.char
+	var cre2_input C.cre2_string_t
+	if len(b) > 0 {
+		c_input = (*C.char)(unsafe.Pointer(&b[0]))
+		cre2_input = C.cre2_string_t{
+			data:   (*C.char)(unsafe.Pointer(&b[0])),
+			length: C.int(len(b)),
+		}
+	} else {
+		c_input = nil
+		cre2_input = C.cre2_string_t{
+			data:   nil,
+			length: 0,
+		}
 	}
 
 	var _n int
@@ -255,6 +287,7 @@ func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 		// XXX : 無限ループにしなくて良いのか?
 		_n = math.MaxInt32
 	}
+	find := false
 
 	var ret [][]byte
 	for i := 0; i < _n; i++ {
@@ -262,6 +295,28 @@ func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 		result := C.cre2_find_and_consume_re(unsafe.Pointer(re.cre2_re_with_bracket), &cre2_input, &cre2_match[0], 1)
 		if !bool(result != 0) {
 			break
+		}
+
+		var offset_begin int
+		if len(b) > 0 {
+			offset_begin = int(C.length_ptr(c_input, cre2_match[0].data))
+		} else {
+			offset_begin = 0
+		}
+		offset_end := offset_begin + int(cre2_match[0].length)
+
+		// 見つからなかった場合は一つずらす
+		if offset_end == offset_begin {
+			cre2_input.data = C.next_ptr(cre2_input.data)
+			cre2_input.length -= 1
+
+			if find {
+				i--
+				find = false
+				continue
+			}
+		} else {
+			find = true
 		}
 
 		bytes := C.GoBytes(unsafe.Pointer(cre2_match[0].data), cre2_match[0].length)
@@ -276,7 +331,12 @@ func (re *Regexp) FindAll(b []byte, n int) [][]byte {
 
 func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 
-	c_input := (*C.char)(unsafe.Pointer(&b[0]))
+	var c_input *C.char
+	if len(b) > 0 {
+		c_input = (*C.char)(unsafe.Pointer(&b[0]))
+	} else {
+		c_input = nil
+	}
 	cre2_input := C.cre2_string_t{
 		data:   c_input,
 		length: C.int(len(b)),
@@ -299,7 +359,12 @@ func (re *Regexp) FindAllIndex(b []byte, n int) [][]int {
 			break
 		}
 
-		offset_begin := int(C.length_ptr(c_input, cre2_match[0].data))
+		var offset_begin int
+		if len(b) > 0 {
+			offset_begin = int(C.length_ptr(c_input, cre2_match[0].data))
+		} else {
+			offset_begin = 0
+		}
 		offset_end := offset_begin + int(cre2_match[0].length)
 
 		// 見つからなかった場合は一つずらす
@@ -369,7 +434,12 @@ func (re *Regexp) FindAllStringSubmatchIndex(s string, n int) [][]int {
 
 func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 
-	c_input := (*C.char)(unsafe.Pointer(&b[0]))
+	var c_input *C.char
+	if len(b) > 0 {
+		c_input = (*C.char)(unsafe.Pointer(&b[0]))
+	} else {
+		c_input = nil
+	}
 	cre2_input := C.cre2_string_t{
 		data:   c_input,
 		length: C.int(len(b)),
@@ -382,6 +452,7 @@ func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 		// XXX : 無限ループにしなくて良いのか?
 		_n = math.MaxInt32
 	}
+	find := false
 
 	var ret [][][]byte
 	for i := 0; i < _n; i++ {
@@ -392,6 +463,28 @@ func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 		result := C.cre2_find_and_consume_re(unsafe.Pointer(re.cre2_re_with_bracket), &cre2_input, &cre2_match[0], groups)
 		if !bool(result != 0) {
 			break
+		}
+
+		var offset_begin int
+		if len(b) > 0 {
+			offset_begin = int(C.length_ptr(c_input, cre2_match[0].data))
+		} else {
+			offset_begin = 0
+		}
+		offset_end := offset_begin + int(cre2_match[0].length)
+
+		// 見つからなかった場合は一つずらす
+		if offset_end == offset_begin {
+			cre2_input.data = C.next_ptr(cre2_input.data)
+			cre2_input.length -= 1
+
+			if find {
+				i--
+				find = false
+				continue
+			}
+		} else {
+			find = true
 		}
 
 		var bytes [][]byte
@@ -409,7 +502,13 @@ func (re *Regexp) FindAllSubmatch(b []byte, n int) [][][]byte {
 }
 
 func (re *Regexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
-	c_input := (*C.char)(unsafe.Pointer(&b[0]))
+
+	var c_input *C.char
+	if len(b) > 0 {
+		c_input = (*C.char)(unsafe.Pointer(&b[0]))
+	} else {
+		c_input = nil
+	}
 	cre2_input := C.cre2_string_t{
 		data:   c_input,
 		length: C.int(len(b)),
@@ -422,6 +521,7 @@ func (re *Regexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
 		// XXX : 無限ループにしなくて良いのか?
 		_n = math.MaxInt32
 	}
+	find := false
 
 	var ret [][]int
 	for i := 0; i < _n; i++ {
@@ -432,6 +532,28 @@ func (re *Regexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
 		result := C.cre2_find_and_consume_re(unsafe.Pointer(re.cre2_re_with_bracket), &cre2_input, &cre2_match[0], groups)
 		if !bool(result != 0) {
 			break
+		}
+
+		var offset_begin int
+		if len(b) > 0 {
+			offset_begin = int(C.length_ptr(c_input, cre2_match[0].data))
+		} else {
+			offset_begin = 0
+		}
+		offset_end := offset_begin + int(cre2_match[0].length)
+
+		// 見つからなかった場合は一つずらす
+		if offset_end == offset_begin {
+			cre2_input.data = C.next_ptr(cre2_input.data)
+			cre2_input.length -= 1
+
+			if find {
+				i--
+				find = false
+				continue
+			}
+		} else {
+			find = true
 		}
 
 		var indexes []int
@@ -545,10 +667,17 @@ func (re *Regexp) Longest() {
 }
 
 func (re *Regexp) Match(b []byte) bool {
-	c_input := (*C.char)(unsafe.Pointer(&b[0]))
-	cre2_input := C.cre2_string_t{
-		data:   c_input,
-		length: C.int(len(b)),
+	var cre2_input C.cre2_string_t
+	if len(b) > 0 {
+		cre2_input = C.cre2_string_t{
+			data:   (*C.char)(unsafe.Pointer(&b[0])),
+			length: C.int(len(b)),
+		}
+	} else {
+		cre2_input = C.cre2_string_t{
+			data:   nil,
+			length: 0,
+		}
 	}
 
 	var cre2_match [1]C.cre2_string_t
